@@ -82,6 +82,8 @@ st.sidebar.subheader("👑 Admin Zone")
 admin_input = st.sidebar.text_input("Enter Admin Password", type="password")
 if admin_input == ADMIN_PASSWORD:
     st.sidebar.success("Admin Unlocked")
+    
+    # 1. Add Exercise
     new_exercise = st.sidebar.text_input("Type new exercise name")
     if st.sidebar.button("Add to List") and new_exercise:
         if new_exercise not in all_exercises:
@@ -90,7 +92,26 @@ if admin_input == ADMIN_PASSWORD:
             save_to_sheet(df)
             st.sidebar.success(f"{new_exercise} added!")
             st.rerun()
+            
+    st.sidebar.divider()
     
+    # 2. Force Delete ANY Record (THE RESTORED FEATURE)
+    st.sidebar.markdown("**Force Delete a PR Record**")
+    admin_display_df = df[df['Name'] != 'Admin']
+    if not admin_display_df.empty:
+        force_name = st.sidebar.selectbox("Select Any Name", admin_display_df['Name'].unique(), key="force_name")
+        force_ex = st.sidebar.selectbox("Select Lift", admin_display_df[admin_display_df['Name'] == force_name]['Exercise'].unique() if force_name else [], key="force_ex")
+        if st.sidebar.button("Delete PR", type="primary"):
+            df = df[~((df['Name'] == force_name) & (df['Exercise'] == force_ex))]
+            save_to_sheet(df)
+            st.sidebar.success("Record annihilated.")
+            st.rerun()
+    else:
+        st.sidebar.info("No user records to delete yet.")
+    
+    st.sidebar.divider()
+    
+    # 3. Nuke Entire Exercise
     st.sidebar.markdown("**NUKE AN ENTIRE EXERCISE**")
     nuke_ex = st.sidebar.selectbox("Select Exercise to Destroy", all_exercises, key="nuke_ex")
     if st.sidebar.button("Nuke Exercise", type="primary"):
