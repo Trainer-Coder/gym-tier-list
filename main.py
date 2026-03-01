@@ -5,6 +5,7 @@ from google.oauth2.service_account import Credentials
 import json
 import datetime
 import altair as alt
+import os
 
 # Page Config
 st.set_page_config(page_title="Gym Tier List", page_icon="💪", layout="wide")
@@ -39,17 +40,12 @@ if not data:
 else:
     df = pd.DataFrame(data)
 
-# Auto-upgrade database for new features
 for col in ["Quote", "Passcode", "Timestamp", "Color"]:
     if col not in df.columns:
-        if col == "Timestamp":
-            df[col] = str(datetime.datetime.now())
-        elif col == "Color":
-            df[col] = "#00ffcc"
-        else:
-            df[col] = ""
-if "BodyWeight" not in df.columns:
-    df["BodyWeight"] = 150.0
+        if col == "Timestamp": df[col] = str(datetime.datetime.now())
+        elif col == "Color": df[col] = "#00ffcc"
+        else: df[col] = ""
+if "BodyWeight" not in df.columns: df["BodyWeight"] = 150.0
 
 df["Quote"] = df["Quote"].fillna("").astype(str)
 df["Passcode"] = df["Passcode"].fillna("").astype(str)
@@ -59,8 +55,7 @@ df["Color"] = df["Color"].fillna("#00ffcc").astype(str)
 ADMIN_PASSWORD = "boss123"
 
 all_exercises = sorted(df[df['Exercise'] != "No Exercises Found"]['Exercise'].dropna().unique().tolist())
-if not all_exercises:
-    all_exercises = ["Bench Press", "Squat", "Deadlift"]
+if not all_exercises: all_exercises = ["Bench Press", "Squat", "Deadlift"]
 
 # --- SIDEBAR: USER SETTINGS & ADMIN ---
 st.sidebar.header("⚙️ App Controls")
@@ -70,7 +65,6 @@ with st.sidebar.expander("🗑️ Delete My Record", expanded=False):
         del_name = st.selectbox("Your Name", df[df['Name'] != 'Admin']['Name'].unique())
         del_exercise = st.selectbox("Lift to Delete", df[df['Name'] == del_name]['Exercise'].unique())
         del_pin = st.text_input("Your PIN", type="password", key="del_pin")
-        
         if st.button("Delete My Record"):
             user_records = df[df['Name'] == del_name]
             correct_pin = str(user_records.iloc[0]['Passcode'])
@@ -79,14 +73,12 @@ with st.sidebar.expander("🗑️ Delete My Record", expanded=False):
                 save_to_sheet(df)
                 st.success("Deleted successfully!")
                 st.rerun()
-            else:
-                st.error("❌ Incorrect PIN for this user.")
+            else: st.error("❌ Incorrect PIN for this user.")
 
 with st.sidebar.expander("👑 Admin Vault", expanded=False):
     admin_input = st.text_input("Enter Admin Password", type="password")
     if admin_input == ADMIN_PASSWORD:
         st.success("Admin Unlocked")
-        
         new_exercise = st.text_input("Type new exercise name")
         if st.button("Add to List") and new_exercise:
             if new_exercise not in all_exercises:
@@ -95,7 +87,6 @@ with st.sidebar.expander("👑 Admin Vault", expanded=False):
                 save_to_sheet(df)
                 st.success(f"{new_exercise} added!")
                 st.rerun()
-                
         st.divider()
         st.markdown("**Force Delete a PR Record**")
         admin_display_df = df[df['Name'] != 'Admin']
@@ -107,9 +98,6 @@ with st.sidebar.expander("👑 Admin Vault", expanded=False):
                 save_to_sheet(df)
                 st.success("Record annihilated.")
                 st.rerun()
-        else:
-            st.info("No user records to delete yet.")
-        
         st.divider()
         st.markdown("**NUKE AN ENTIRE EXERCISE**")
         nuke_ex = st.selectbox("Select Exercise to Destroy", all_exercises, key="nuke_ex")
@@ -142,7 +130,6 @@ with st.expander("➕ Log a New PR", expanded=False):
         if st.form_submit_button("Update Leaderboard"):
             if user_name and user_pin:
                 existing_user = df[df['Name'] == user_name]
-                
                 user_color = "#00ffcc" 
                 if not existing_user.empty:
                     correct_pin = str(existing_user.iloc[0]['Passcode'])
@@ -155,20 +142,16 @@ with st.expander("➕ Log a New PR", expanded=False):
                 new_row = pd.DataFrame({"Name": [user_name], "Exercise": [exercise], "Weight": [weight], "BodyWeight": [body_weight], "Quote": [quote], "Passcode": [user_pin], "Timestamp": [timestamp], "Color": [user_color]})
                 df = pd.concat([df, new_row], ignore_index=True)
                 save_to_sheet(df)
-                
                 st.balloons()
                 st.success(f"Boom! {user_name} updated to {weight} lbs.")
                 st.rerun()
-            else:
-                st.warning("Please enter your name and a PIN!")
+            else: st.warning("Please enter your name and a PIN!")
 
 # --- DATA PREP ---
 display_df = df[df['Name'] != 'Admin'].copy()
 display_df['BodyWeight'] = pd.to_numeric(display_df['BodyWeight'], errors='coerce').fillna(150.0)
 display_df['Weight'] = pd.to_numeric(display_df['Weight'], errors='coerce').fillna(0.0)
 display_df['Multiplier'] = display_df['Weight'] / display_df['BodyWeight']
-
-# This isolates everyone's all-time max for the leaderboard
 pr_df = display_df.sort_values('Weight', ascending=False).drop_duplicates(subset=['Name', 'Exercise'])
 
 global_color_map = {}
@@ -184,26 +167,16 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(["🏆 Leaderboard", "📈 Gains Chart", 
 
 with tab1:
     col_a, col_b = st.columns(2)
-    with col_a:
-        selected_lift = st.selectbox("View Rankings For:", all_exercises, key="rank_lift")
-    with col_b:
-        ranking_style = st.radio("Rank By:", ["Max Weight (lbs)", "Pound-for-Pound (Multiplier)"])
+    with col_a: selected_lift = st.selectbox("View Rankings For:", all_exercises, key="rank_lift")
+    with col_b: ranking_style = st.radio("Rank By:", ["Max Weight (lbs)", "Pound-for-Pound (Multiplier)"])
 
-    if ranking_style == "Max Weight (lbs)":
-        filtered_df = pr_df[pr_df['Exercise'] == selected_lift].sort_values(by="Weight", ascending=False).reset_index(drop=True)
-    else:
-        filtered_df = pr_df[pr_df['Exercise'] == selected_lift].sort_values(by="Multiplier", ascending=False).reset_index(drop=True)
+    if ranking_style == "Max Weight (lbs)": filtered_df = pr_df[pr_df['Exercise'] == selected_lift].sort_values(by="Weight", ascending=False).reset_index(drop=True)
+    else: filtered_df = pr_df[pr_df['Exercise'] == selected_lift].sort_values(by="Multiplier", ascending=False).reset_index(drop=True)
 
-    if filtered_df.empty:
-        st.info("No records for this lift yet. Be the first!")
+    if filtered_df.empty: st.info("No records for this lift yet. Be the first!")
     else:
         champ_row = filtered_df.iloc[0]
-        
-        if ranking_style == "Max Weight (lbs)":
-            champ_stat = f"{champ_row['Weight']} lbs"
-        else:
-            champ_stat = f"{champ_row['Multiplier']:.2f}x Bodyweight <span style='font-size: 16px; color: #ffffff;'>({champ_row['Weight']} lbs)</span>"
-            
+        champ_stat = f"{champ_row['Weight']} lbs" if ranking_style == "Max Weight (lbs)" else f"{champ_row['Multiplier']:.2f}x Bodyweight <span style='font-size: 16px; color: #ffffff;'>({champ_row['Weight']} lbs)</span>"
         quote_html = f'<h3 style="font-style: italic;">"{champ_row["Quote"]}"</h3>' if str(champ_row['Quote']).strip() != "" else ""
         
         st.markdown(f'''
@@ -236,14 +209,11 @@ with tab1:
 
 with tab2:
     st.subheader("📈 Progress Over Time")
-    
     with st.expander("🎨 Customize My Chart Color", expanded=False):
         cc_name = st.selectbox("Your Name", display_df['Name'].unique() if not display_df.empty else [])
         cc_pin = st.text_input("Your PIN", type="password", key="cc_pin")
-        
         current_color = global_color_map.get(cc_name, "#00ffcc") if cc_name else "#00ffcc"
         new_color = st.color_picker("Pick your new color", current_color)
-        
         if st.button("Update Color"):
             user_records = df[df['Name'] == cc_name]
             if not user_records.empty:
@@ -253,60 +223,42 @@ with tab2:
                     save_to_sheet(df)
                     st.success("Color successfully updated!")
                     st.rerun()
-                else:
-                    st.error("❌ Incorrect PIN.")
+                else: st.error("❌ Incorrect PIN.")
     
     chart_lift = st.selectbox("Select Lift to Graph:", all_exercises, key="chart_lift")
     chart_data = display_df[display_df['Exercise'] == chart_lift].copy()
-    
     if not chart_data.empty:
         chart_data = chart_data[chart_data['Weight'] <= 800]
         chart_data['Timestamp'] = pd.to_datetime(chart_data['Timestamp'], errors='coerce')
-        
         chart = alt.Chart(chart_data).mark_line(point=True, strokeWidth=3).encode(
             x=alt.X('Timestamp:T', title='Date'),
             y=alt.Y('Weight:Q', title='Weight (lbs)', scale=alt.Scale(domain=[0, 800])),
             color=alt.Color('Name:N', scale=alt.Scale(domain=c_domain, range=c_range), title='Lifter'),
             tooltip=['Name', 'Weight', 'Timestamp']
         )
-        
         st.altair_chart(chart, use_container_width=True)
-    else:
-        st.info("Log some lifts to see the chart grow!")
+    else: st.info("Log some lifts to see the chart grow!")
 
 with tab3:
     st.subheader("🔥 The 1,000 lb Club")
-    st.markdown("Your total is the sum of your all-time Max **Bench Press**, **Squat**, and **Deadlift**.")
-    
     sbd_df = pr_df[pr_df['Exercise'].isin(["Bench Press", "Squat", "Deadlift"])]
     totals = sbd_df.groupby('Name')['Weight'].sum().reset_index()
     totals = totals.sort_values(by='Weight', ascending=False).reset_index(drop=True)
-    
-    if totals.empty:
-        st.info("Nobody has logged Bench, Squat, and Deadlift yet!")
+    if totals.empty: st.info("Nobody has logged Bench, Squat, and Deadlift yet!")
     else:
         for index, row in totals.iterrows():
-            if row['Weight'] >= 1000:
-                st.success(f"👑 **{row['Name']}** is in the club! Total: **{row['Weight']} lbs**")
-            else:
-                st.info(f"💪 **{row['Name']}** is on the grind. Total: **{row['Weight']} lbs** (Needs {1000 - row['Weight']} lbs more)")
+            if row['Weight'] >= 1000: st.success(f"👑 **{row['Name']}** is in the club! Total: **{row['Weight']} lbs**")
+            else: st.info(f"💪 **{row['Name']}** is on the grind. Total: **{row['Weight']} lbs** (Needs {1000 - row['Weight']} lbs more)")
 
 with tab4:
     st.subheader("⚔️ The Nemesis System")
-    st.markdown("Select two lifters to see how they stack up against each other.")
-    
     unique_lifters = sorted(pr_df['Name'].unique().tolist())
-    
     if len(unique_lifters) >= 2:
         col_x, col_y = st.columns(2)
-        with col_x:
-            lifter_a = st.selectbox("Lifter A", unique_lifters, index=0)
-        with col_y:
-            lifter_b = st.selectbox("Lifter B", unique_lifters, index=1)
-            
+        with col_x: lifter_a = st.selectbox("Lifter A", unique_lifters, index=0)
+        with col_y: lifter_b = st.selectbox("Lifter B", unique_lifters, index=1)
         if lifter_a != lifter_b:
             vs_df = pr_df[pr_df['Name'].isin([lifter_a, lifter_b])].copy()
-            
             if not vs_df.empty:
                 bars = alt.Chart(vs_df).mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
                     x=alt.X('Name:N', title=None, axis=alt.Axis(labels=False, ticks=False)),
@@ -314,54 +266,109 @@ with tab4:
                     color=alt.Color('Name:N', scale=alt.Scale(domain=c_domain, range=c_range), legend=alt.Legend(title="Lifter", orient="bottom")),
                     column=alt.Column('Exercise:N', header=alt.Header(title=None, labelOrient='bottom'))
                 ).properties(width=100, height=400)
-                
                 st.altair_chart(bars)
-            else:
-                st.info("No data to compare yet.")
-        else:
-            st.warning("Please select two different lifters to compare.")
-    else:
-        st.info("You need at least 2 people on the leaderboard to unlock the Nemesis System!")
+            else: st.info("No data to compare yet.")
+        else: st.warning("Please select two different lifters to compare.")
+    else: st.info("You need at least 2 people on the leaderboard to unlock the Nemesis System!")
 
 with tab5:
     st.subheader("🧠 Skeletomuscular Functions")
-    st.markdown("Select a muscle group to view its structure and optimal exercises.")
+    st.markdown("Select a muscle group, then click a part to reveal how to train it.")
     
+    # 🔧 THE UPGRADE: Nested dictionaries for interactive muscle parts!
     anatomy_db = {
         "Chest (Pectoralis)": {
-            "heads": "Clavicular (Upper), Sternocostal (Mid), Abdominal (Lower)",
-            "function": "Brings the arms across the body (horizontal adduction) and pushes objects away.",
-            "exercises": "Incline DB Press (Upper), Flat Bench (Mid), Cable Crossovers (Lower)",
-            "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6c/Pectoralis_major.png/400px-Pectoralis_major.png"
+            "image_path": "chest.png",
+            "parts": {
+                "Upper Chest (Clavicular)": {
+                    "function": "Lifts the arms up and across the body. Gives the chest a 'full' look.",
+                    "exercises": "Incline DB Press, Low-to-High Cable Crossovers"
+                },
+                "Mid Chest (Sternocostal)": {
+                    "function": "Brings the arms straight across the chest (horizontal adduction).",
+                    "exercises": "Flat Barbell Bench Press, Pec Deck Flys"
+                },
+                "Lower Chest (Abdominal)": {
+                    "function": "Pulls the arms down and across the body.",
+                    "exercises": "Dips, High-to-Low Cable Crossovers"
+                }
+            }
         },
         "Shoulders (Deltoids)": {
-            "heads": "Anterior (Front), Lateral (Side), Posterior (Rear)",
-            "function": "Lifts the arms away from the body in all directions. Crucial for joint stability.",
-            "exercises": "Overhead Press (Front), Lateral Raises (Side), Face Pulls (Rear)",
-            "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/11/Deltoid_muscle.png/400px-Deltoid_muscle.png"
+            "image_path": "shoulders.png",
+            "parts": {
+                "Front Delt (Anterior)": {
+                    "function": "Raises the arm straight in front of you. Heavily involved in pressing.",
+                    "exercises": "Overhead Press, Front Raises"
+                },
+                "Side Delt (Lateral)": {
+                    "function": "Raises the arm out to the side. Crucial for the 'V-Taper' width.",
+                    "exercises": "Dumbbell Lateral Raises, Cable Lateral Raises"
+                },
+                "Rear Delt (Posterior)": {
+                    "function": "Pulls the arm backward. Vital for shoulder health and posture.",
+                    "exercises": "Face Pulls, Reverse Pec Deck"
+                }
+            }
         },
-        "Back (Latissimus Dorsi & Rhomboids)": {
-            "heads": "Lats (Width), Traps (Thickness), Rhomboids (Inner)",
-            "function": "Pulls the arms down and back. Stabilizes the spine during heavy lifts.",
-            "exercises": "Pull-ups (Width), Barbell Rows (Thickness), Deadlifts (Overall)",
-            "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d4/Latissimus_dorsi.png/400px-Latissimus_dorsi.png"
+        "Back": {
+            "image_path": "back.png",
+            "parts": {
+                "Lats (Latissimus Dorsi)": {
+                    "function": "Pulls the arms down and back. Creates back width.",
+                    "exercises": "Pull-ups, Lat Pulldowns, Single-Arm Rows"
+                },
+                "Traps (Trapezius)": {
+                    "function": "Shrugs the shoulders up and pulls the shoulder blades together.",
+                    "exercises": "Barbell Shrugs, Rack Pulls"
+                },
+                "Rhomboids": {
+                    "function": "Retracts the scapula (squeezes shoulder blades together).",
+                    "exercises": "Barbell Rows, Seated Cable Rows"
+                }
+            }
         },
-        "Legs (Quadriceps & Hamstrings)": {
-            "heads": "Quads (Front - 4 heads), Hamstrings (Back - 3 heads), Glutes",
-            "function": "Extends the knee (Quads) and hinges the hips/flexes the knee (Hamstrings).",
-            "exercises": "Squats (Quads/Glutes), Romanian Deadlifts (Hamstrings), Leg Extensions (Quads)",
-            "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a2/Quadriceps.png/400px-Quadriceps.png"
+        "Legs": {
+            "image_path": "legs.png",
+            "parts": {
+                "Quads (Quadriceps)": {
+                    "function": "Extends the knee. The massive muscles on the front of the thigh.",
+                    "exercises": "Barbell Squats, Leg Press, Leg Extensions"
+                },
+                "Hamstrings": {
+                    "function": "Flexes the knee and extends the hips. Crucial for speed and power.",
+                    "exercises": "Romanian Deadlifts (RDLs), Leg Curls"
+                },
+                "Glutes": {
+                    "function": "The body's primary hip extensor. The strongest muscle you have.",
+                    "exercises": "Hip Thrusts, Deep Squats, Lunges"
+                },
+                "Calves": {
+                    "function": "Points the toes downward (plantar flexion).",
+                    "exercises": "Standing Calf Raises, Seated Calf Raises"
+                }
+            }
         }
     }
     
     selected_muscle = st.selectbox("Select Muscle Group", list(anatomy_db.keys()))
     muscle_data = anatomy_db[selected_muscle]
     
-    col_text, col_img = st.columns([2, 1])
-    with col_text:
-        st.markdown(f"### {selected_muscle}")
-        st.markdown(f"**🧬 Muscle Heads:** {muscle_data['heads']}")
-        st.markdown(f"**⚙️ Primary Function:** {muscle_data['function']}")
-        st.markdown(f"**🏋️ Top Exercises:** {muscle_data['exercises']}")
+    col_img, col_text = st.columns([1, 1.5])
+    
     with col_img:
-        st.image(muscle_data['image_url'], use_container_width=True)
+        if os.path.exists(muscle_data['image_path']):
+            st.image(muscle_data['image_path'], use_container_width=True)
+        else:
+            st.warning(f"⚠️ Image not found! Please upload `{muscle_data['image_path']}` to GitHub.")
+            
+    with col_text:
+        st.markdown(f"### Target the {selected_muscle}")
+        # The interactive sub-menu buttons!
+        selected_part = st.radio("Select a specific head/part:", list(muscle_data['parts'].keys()), horizontal=True)
+        
+        part_info = muscle_data['parts'][selected_part]
+        
+        st.markdown("---")
+        st.markdown(f"**⚙️ Biomechanics:** {part_info['function']}")
+        st.markdown(f"**🏋️ Top Exercises:** {part_info['exercises']}")
