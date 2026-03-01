@@ -95,7 +95,7 @@ if admin_input == ADMIN_PASSWORD:
             
     st.sidebar.divider()
     
-    # 2. Force Delete ANY Record (THE RESTORED FEATURE)
+    # 2. Force Delete ANY Record
     st.sidebar.markdown("**Force Delete a PR Record**")
     admin_display_df = df[df['Name'] != 'Admin']
     if not admin_display_df.empty:
@@ -188,14 +188,24 @@ with tab1:
         st.info("No records for this lift yet. Be the first!")
     else:
         champ_row = filtered_df.iloc[0]
-        if str(champ_row['Quote']).strip() != "":
-            st.markdown(f'''
-                <div class="champ-board">
-                    <h2 style="color: #ffd700; margin-bottom: 5px;">👑 True Gym Rat: {selected_lift} 👑</h2>
-                    <h3 style="font-style: italic;">"{champ_row['Quote']}"</h3>
-                    <p style="margin-top: 10px; font-size: 18px;">- <b>{champ_row['Name']}</b></p>
-                </div>
-            ''', unsafe_allow_html=True)
+        
+        # Determine the stat text for the Champion based on the toggle
+        if ranking_style == "Max Weight (lbs)":
+            champ_stat = f"{champ_row['Weight']} lbs"
+        else:
+            champ_stat = f"{champ_row['Multiplier']:.2f}x Bodyweight <span style='font-size: 16px; color: #ffffff;'>({champ_row['Weight']} lbs)</span>"
+            
+        # Display the quote only if they wrote one
+        quote_html = f'<h3 style="font-style: italic;">"{champ_row["Quote"]}"</h3>' if str(champ_row['Quote']).strip() != "" else ""
+        
+        st.markdown(f'''
+            <div class="champ-board">
+                <h2 style="color: #ffd700; margin-bottom: 5px;">👑 True Gym Rat: {selected_lift} 👑</h2>
+                {quote_html}
+                <p style="font-size: 26px; margin: 10px 0px; color: #00ffcc;"><b>{champ_stat}</b></p>
+                <p style="font-size: 18px; margin-bottom: 0px;">- <b>{champ_row['Name']}</b></p>
+            </div>
+        ''', unsafe_allow_html=True)
 
         for index, row in filtered_df.iterrows():
             rank = index + 1
