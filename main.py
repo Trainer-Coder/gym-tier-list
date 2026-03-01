@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
-import os
+import gspread
+from google.oauth2.service_account import Credentials
+import json
 
 # Page Config
 st.set_page_config(page_title="Gym Tier List", page_icon="💪", layout="wide")
@@ -15,18 +17,36 @@ st.markdown("""
 
 st.title("🏆 Iron Leaderboard")
 
-# 1. Load Data Safely & Auto-Upgrade the CSV
-if not os.path.exists("gym_data.csv"):
-    pd.DataFrame(columns=["Name", "Exercise", "Weight", "Quote", "Passcode"]).to_csv("gym_data.csv", index=False)
-df = pd.read_csv("gym_data.csv")
+# --- 1. CONNECT TO GOOGLE SHEETS ---
+# Load the secret JSON key we saved in Streamlit Settings
+scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+creds_dict = json.loads(st.secrets["gcp_json"])
+creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+client = gspread.authorize(creds)
 
+# Open the sheet (Make sure this matches your Google Sheet name exactly!)
+sheet = client.open("Gym Leaderboard DB").sheet1
+
+# Helper function to save DataFrames to Google Sheets
+def save_to_sheet(dataframe):
+    sheet.clear()
+    sheet.update(values=[dataframe.columns.values.tolist()] + dataframe.values.tolist(), range_name="A1")
+
+# Load existing data
+data = sheet.get_all_records()
+if not data:
+    # If the sheet is totally blank, create the columns
+    df = pd.DataFrame(columns=["Name", "Exercise", "Weight", "Quote", "Passcode"])
+    save_to_sheet(df)
+else:
+    df = pd.DataFrame(data)
+
+# Ensure Passcode and Quote columns exist as text
 for col in ["Quote", "Passcode"]:
     if col not in df.columns:
         df[col] = ""
-        df.to_csv("gym_data.csv", index=False)
-
-df["Quote"] = df["Quote"].fillna("")
-df["Passcode"] = df["Passcode"].fillna("")
+df["Quote"] = df["Quote"].fillna("").astype(str)
+df["Passcode"] = df["Passcode"].fillna("").astype(str)
 
 # --- YOUR MASTER ADMIN PASSWORD ---
 ADMIN_PASSWORD = "boss123"
@@ -38,7 +58,6 @@ all_exercises = list(set(default_exercises + existing_exercises))
 # --- SIDEBAR: USER SETTINGS & ADMIN ---
 st.sidebar.header("⚙️ Control Panel")
 
-# Section A: Users deleting their own records
 st.sidebar.subheader("🗑️ Delete My Record")
 if not df.empty and len(df[df['Name'] != 'Admin']) > 0:
     del_name = st.sidebar.selectbox("Your Name", df[df['Name'] != 'Admin']['Name'].unique())
@@ -51,7 +70,7 @@ if not df.empty and len(df[df['Name'] != 'Admin']) > 0:
         
         if del_pin == correct_pin or correct_pin == "":
             df = df[~((df['Name'] == del_name) & (df['Exercise'] == del_exercise))]
-            df.to_csv("gym_data.csv", index=False)
+            save_to_sheet(df)
             st.sidebar.success("Deleted successfully!")
             st.rerun()
         else:
@@ -59,30 +78,27 @@ if not df.empty and len(df[df['Name'] != 'Admin']) > 0:
 
 st.sidebar.divider()
 
-# Section B: The Admin Zone
 st.sidebar.subheader("👑 Admin Zone")
 admin_input = st.sidebar.text_input("Enter Admin Password", type="password")
 
 if admin_input == ADMIN_PASSWORD:
     st.sidebar.success("Admin Unlocked")
     
-    # Admin Add Exercise
     new_exercise = st.sidebar.text_input("Type new exercise name")
     if st.sidebar.button("Add to List") and new_exercise:
         if new_exercise not in all_exercises:
             new_row = pd.DataFrame({"Name": ["Admin"], "Exercise": [new_exercise], "Weight": [0], "Quote": [""], "Passcode": [""]})
             df = pd.concat([df, new_row], ignore_index=True)
-            df.to_csv("gym_data.csv", index=False)
+            save_to_sheet(df)
             st.sidebar.success(f"{new_exercise} added!")
             st.rerun()
             
-    # Admin Delete ANY Record
     st.sidebar.markdown("**Force Delete a Record**")
     force_name = st.sidebar.selectbox("Select Any Name", df[df['Name'] != 'Admin']['Name'].unique(), key="force_name")
     force_ex = st.sidebar.selectbox("Select Lift", df[df['Name'] == force_name]['Exercise'].unique() if force_name else [], key="force_ex")
     if st.sidebar.button("Force Delete", type="primary"):
         df = df[~((df['Name'] == force_name) & (df['Exercise'] == force_ex))]
-        df.to_csv("gym_data.csv", index=False)
+        save_to_sheet(df)
         st.sidebar.success("Record annihilated.")
         st.rerun()
 
@@ -97,11 +113,10 @@ with st.expander("➕ Log a New PR", expanded=True):
         with col2:
             quote = st.text_input("Champion's Quote (Only shows if you hit #1!)")
             user_pin = st.text_input("Create/Enter your PIN (4 digits)", type="password")
-            st.caption("If this is your first time, create a PIN. If updating, use your existing PIN.")
+            st.caption("First time? Create a PIN. Updating? Use your existing PIN.")
             
         if st.form_submit_button("Update Leaderboard"):
             if user_name and user_pin:
-                # Check if user exists to verify PIN
                 existing_user = df[df['Name'] == user_name]
                 if not existing_user.empty:
                     correct_pin = str(existing_user.iloc[0]['Passcode'])
@@ -109,7 +124,6 @@ with st.expander("➕ Log a New PR", expanded=True):
                         st.error("❌ That name is taken, and your PIN is incorrect!")
                         st.stop()
                 
-                # If PIN is correct or user is new, save the data
                 mask = (df['Name'] == user_name) & (df['Exercise'] == exercise)
                 if mask.any():
                     df.loc[mask, 'Weight'] = weight
@@ -118,7 +132,7 @@ with st.expander("➕ Log a New PR", expanded=True):
                     new_row = pd.DataFrame({"Name": [user_name], "Exercise": [exercise], "Weight": [weight], "Quote": [quote], "Passcode": [user_pin]})
                     df = pd.concat([df, new_row], ignore_index=True)
                 
-                df.to_csv("gym_data.csv", index=False)
+                save_to_sheet(df)
                 st.success(f"Boom! {user_name} updated to {weight} lbs.")
                 st.rerun()
             else:
@@ -134,7 +148,6 @@ filtered_df = display_df[display_df['Exercise'] == selected_lift].sort_values(by
 if filtered_df.empty:
     st.info("No records for this lift yet. Be the first!")
 else:
-    # --- THE CHAMPION'S BOARD ---
     champ_row = filtered_df.iloc[0]
     if str(champ_row['Quote']).strip() != "":
         st.markdown(f'''
@@ -145,7 +158,6 @@ else:
             </div>
         ''', unsafe_allow_html=True)
 
-    # Display the regular tiers
     for index, row in filtered_df.iterrows():
         rank = index + 1
         tier_label = "🥇 S-Tier" if rank == 1 else "🥈 A-Tier" if rank == 2 else "🥉 B-Tier" if rank == 3 else f"Rank {rank}"
