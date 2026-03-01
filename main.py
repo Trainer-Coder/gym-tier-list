@@ -3,6 +3,7 @@ import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 import json
+import datetime
 
 # Page Config
 st.set_page_config(page_title="Gym Tier List", page_icon="💪", layout="wide")
@@ -10,8 +11,9 @@ st.set_page_config(page_title="Gym Tier List", page_icon="💪", layout="wide")
 st.markdown("""
     <style>
     .main { background-color: #0e1117; color: #ffffff; }
-    .tier-card { padding: 15px; border-radius: 10px; background-color: #262730; margin-bottom: 10px; }
+    .tier-card { padding: 15px; border-radius: 10px; background-color: #262730; margin-bottom: 10px; border-left: 5px solid #ff4b4b;}
     .champ-board { padding: 20px; border-radius: 10px; border: 2px solid #ffd700; background-color: #332b00; text-align: center; margin-bottom: 25px; box-shadow: 0px 4px 15px rgba(255, 215, 0, 0.15); }
+    .hype-feed { padding: 10px; border-radius: 5px; background-color: #1e1e24; color: #00ffcc; font-family: monospace; text-align: center; margin-bottom: 20px;}
     </style>
     """, unsafe_allow_html=True)
 
@@ -22,7 +24,6 @@ scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapi
 creds_dict = json.loads(st.secrets["gcp_json"])
 creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
 client = gspread.authorize(creds)
-
 sheet = client.open("Gym Leaderboard DB").sheet1
 
 def save_to_sheet(dataframe):
@@ -31,31 +32,34 @@ def save_to_sheet(dataframe):
 
 data = sheet.get_all_records()
 if not data:
-    df = pd.DataFrame(columns=["Name", "Exercise", "Weight", "BodyWeight", "Quote", "Passcode"])
-    df.loc[0] = ["Admin", "Bench Press", 0, 0, "", ""]
+    df = pd.DataFrame(columns=["Name", "Exercise", "Weight", "BodyWeight", "Quote", "Passcode", "Timestamp"])
+    df.loc[0] = ["Admin", "Bench Press", 0, 0, "", "", str(datetime.datetime.now())]
     save_to_sheet(df)
 else:
     df = pd.DataFrame(data)
 
-# Auto-upgrade the database columns if they are missing
-for col in ["Quote", "Passcode"]:
+# Auto-upgrade database for new features
+for col in ["Quote", "Passcode", "Timestamp"]:
     if col not in df.columns:
-        df[col] = ""
+        if col == "Timestamp":
+            df[col] = str(datetime.datetime.now())
+        else:
+            df[col] = ""
 if "BodyWeight" not in df.columns:
-    df["BodyWeight"] = 150.0  # Default to avoid math errors on old entries
+    df["BodyWeight"] = 150.0
 
 df["Quote"] = df["Quote"].fillna("").astype(str)
 df["Passcode"] = df["Passcode"].fillna("").astype(str)
+df["Timestamp"] = df["Timestamp"].fillna(str(datetime.datetime.now())).astype(str)
 
 ADMIN_PASSWORD = "boss123"
 
-all_exercises = sorted(df['Exercise'].dropna().unique().tolist())
+all_exercises = sorted(df[df['Exercise'] != "No Exercises Found"]['Exercise'].dropna().unique().tolist())
 if not all_exercises:
-    all_exercises = ["No Exercises Found"]
+    all_exercises = ["Bench Press", "Squat", "Deadlift"]
 
 # --- SIDEBAR: USER SETTINGS & ADMIN ---
 st.sidebar.header("⚙️ Control Panel")
-
 st.sidebar.subheader("🗑️ Delete My Record")
 if not df.empty and len(df[df['Name'] != 'Admin']) > 0:
     del_name = st.sidebar.selectbox("Your Name", df[df['Name'] != 'Admin']['Name'].unique())
@@ -65,7 +69,6 @@ if not df.empty and len(df[df['Name'] != 'Admin']) > 0:
     if st.sidebar.button("Delete My Record"):
         user_records = df[df['Name'] == del_name]
         correct_pin = str(user_records.iloc[0]['Passcode'])
-        
         if del_pin == correct_pin or correct_pin == "":
             df = df[~((df['Name'] == del_name) & (df['Exercise'] == del_exercise))]
             save_to_sheet(df)
@@ -75,40 +78,32 @@ if not df.empty and len(df[df['Name'] != 'Admin']) > 0:
             st.sidebar.error("❌ Incorrect PIN for this user.")
 
 st.sidebar.divider()
-
 st.sidebar.subheader("👑 Admin Zone")
 admin_input = st.sidebar.text_input("Enter Admin Password", type="password")
-
 if admin_input == ADMIN_PASSWORD:
     st.sidebar.success("Admin Unlocked")
-    
     new_exercise = st.sidebar.text_input("Type new exercise name")
     if st.sidebar.button("Add to List") and new_exercise:
         if new_exercise not in all_exercises:
-            new_row = pd.DataFrame({"Name": ["Admin"], "Exercise": [new_exercise], "Weight": [0], "BodyWeight": [0], "Quote": [""], "Passcode": [""]})
+            new_row = pd.DataFrame({"Name": ["Admin"], "Exercise": [new_exercise], "Weight": [0], "BodyWeight": [0], "Quote": [""], "Passcode": [""], "Timestamp": [str(datetime.datetime.now())]})
             df = pd.concat([df, new_row], ignore_index=True)
             save_to_sheet(df)
             st.sidebar.success(f"{new_exercise} added!")
             st.rerun()
-            
-    st.sidebar.markdown("**Force Delete a PR Record**")
-    force_name = st.sidebar.selectbox("Select Any Name", df[df['Name'] != 'Admin']['Name'].unique(), key="force_name")
-    force_ex = st.sidebar.selectbox("Select Lift", df[df['Name'] == force_name]['Exercise'].unique() if force_name else [], key="force_ex")
-    if st.sidebar.button("Delete PR", type="primary"):
-        df = df[~((df['Name'] == force_name) & (df['Exercise'] == force_ex))]
-        save_to_sheet(df)
-        st.sidebar.success("Record annihilated.")
-        st.rerun()
-        
-    st.sidebar.divider()
+    
     st.sidebar.markdown("**NUKE AN ENTIRE EXERCISE**")
-    st.sidebar.caption("⚠️ This deletes the category AND all PRs inside it.")
     nuke_ex = st.sidebar.selectbox("Select Exercise to Destroy", all_exercises, key="nuke_ex")
     if st.sidebar.button("Nuke Exercise", type="primary"):
         df = df[df['Exercise'] != nuke_ex]
         save_to_sheet(df)
-        st.sidebar.success(f"{nuke_ex} has been completely removed.")
+        st.sidebar.success(f"{nuke_ex} completely removed.")
         st.rerun()
+
+# --- THE HYPE FEED ---
+if not df[df['Name'] != 'Admin'].empty:
+    recent_lifts = df[df['Name'] != 'Admin'].sort_values(by="Timestamp", ascending=False).head(3)
+    feed_text = " | ".join([f"🔥 {row['Name']} hit {row['Weight']}lbs on {row['Exercise']}!" for _, row in recent_lifts.iterrows()])
+    st.markdown(f"<div class='hype-feed'>📢 LIVE ACTIVITY: {feed_text}</div>", unsafe_allow_html=True)
 
 # --- MAIN PAGE: LOG PR ---
 with st.expander("➕ Log a New PR", expanded=True):
@@ -125,7 +120,7 @@ with st.expander("➕ Log a New PR", expanded=True):
             st.caption("First time? Create a PIN. Updating? Use your existing PIN.")
             
         if st.form_submit_button("Update Leaderboard"):
-            if user_name and user_pin and exercise != "No Exercises Found":
+            if user_name and user_pin:
                 existing_user = df[df['Name'] == user_name]
                 if not existing_user.empty:
                     correct_pin = str(existing_user.iloc[0]['Passcode'])
@@ -133,94 +128,107 @@ with st.expander("➕ Log a New PR", expanded=True):
                         st.error("❌ That name is taken, and your PIN is incorrect!")
                         st.stop()
                 
-                mask = (df['Name'] == user_name) & (df['Exercise'] == exercise)
-                if mask.any():
-                    df.loc[mask, 'Weight'] = weight
-                    df.loc[mask, 'BodyWeight'] = body_weight
-                    df.loc[mask, 'Quote'] = quote
-                else:
-                    new_row = pd.DataFrame({"Name": [user_name], "Exercise": [exercise], "Weight": [weight], "BodyWeight": [body_weight], "Quote": [quote], "Passcode": [user_pin]})
-                    df = pd.concat([df, new_row], ignore_index=True)
-                
+                # Append the new lift instead of overwriting, to build history!
+                timestamp = str(datetime.datetime.now())
+                new_row = pd.DataFrame({"Name": [user_name], "Exercise": [exercise], "Weight": [weight], "BodyWeight": [body_weight], "Quote": [quote], "Passcode": [user_pin], "Timestamp": [timestamp]})
+                df = pd.concat([df, new_row], ignore_index=True)
                 save_to_sheet(df)
+                
+                st.balloons() # 🎉 CONFETTI EFFECT 🎉
                 st.success(f"Boom! {user_name} updated to {weight} lbs.")
-                st.rerun()
             else:
-                st.warning("Please enter your name, a PIN, and ensure there's a valid exercise selected!")
+                st.warning("Please enter your name and a PIN!")
 
-# --- TIER LIST LOGIC ---
-st.divider()
-
-col_a, col_b = st.columns(2)
-with col_a:
-    selected_lift = st.selectbox("View Rankings For:", all_exercises)
-with col_b:
-    ranking_style = st.radio("Rank By:", ["Max Weight (lbs)", "Pound-for-Pound (Multiplier)"])
-
+# --- ORGANIZE PRs (Get only the highest weight per person per exercise) ---
 display_df = df[df['Name'] != 'Admin'].copy()
-
-# Ensure math works by converting to numbers
 display_df['BodyWeight'] = pd.to_numeric(display_df['BodyWeight'], errors='coerce').fillna(150.0)
 display_df['Weight'] = pd.to_numeric(display_df['Weight'], errors='coerce').fillna(0.0)
-# The Pound-for-Pound formula!
 display_df['Multiplier'] = display_df['Weight'] / display_df['BodyWeight']
 
-# Sort based on the toggle switch
-if ranking_style == "Max Weight (lbs)":
-    filtered_df = display_df[display_df['Exercise'] == selected_lift].sort_values(by="Weight", ascending=False).reset_index(drop=True)
-else:
-    filtered_df = display_df[display_df['Exercise'] == selected_lift].sort_values(by="Multiplier", ascending=False).reset_index(drop=True)
+# This isolates everyone's all-time max for the leaderboard
+pr_df = display_df.sort_values('Weight', ascending=False).drop_duplicates(subset=['Name', 'Exercise'])
 
-if filtered_df.empty:
-    st.info("No records for this lift yet. Be the first!")
-else:
-    champ_row = filtered_df.iloc[0]
-    
-    if str(champ_row['Quote']).strip() != "":
-        st.markdown(f'''
-            <div class="champ-board">
-                <h2 style="color: #ffd700; margin-bottom: 5px;">👑 The Champion: {selected_lift} 👑</h2>
-                <h3 style="font-style: italic;">"{champ_row['Quote']}"</h3>
-                <p style="margin-top: 10px; font-size: 18px;">- <b>{champ_row['Name']}</b></p>
-            </div>
-        ''', unsafe_allow_html=True)
+# --- APP TABS ---
+tab1, tab2, tab3 = st.tabs(["🏆 Leaderboard", "📈 Gains Chart", "🔥 1000 lb Club"])
 
-    # The Custom Joke Tiers!
-    for index, row in filtered_df.iterrows():
-        rank = index + 1
-        
-        if rank == 1:
-            tier_label = "👑 True Gym Rat"
-            border_color = "#ffd700" # Gold
-        elif rank == 2:
-            tier_label = "🥈 ASU Frat leader disciple"
-            border_color = "#C0C0C0" # Silver
-        elif rank == 3:
-            tier_label = "🥉The 225er"
-            border_color = "#CD7F32" # Bronze
-        elif rank == 4:
-            tier_label = "HTN bro"
-            border_color = "#ff4b4b" # Red
-        elif rank == 5:
-            tier_label = "The Skipper"
-            border_color = "#ff8c00" # Orange
-        elif rank == 6:
-            tier_label = "The onceamonthy"
-            border_color = "#8a2be2" # Purple
-        else:
-            tier_label = "gym bud (Needs more pre)"
-            border_color = "#555555" # Dark Grey
+with tab1:
+    col_a, col_b = st.columns(2)
+    with col_a:
+        selected_lift = st.selectbox("View Rankings For:", all_exercises, key="rank_lift")
+    with col_b:
+        ranking_style = st.radio("Rank By:", ["Max Weight (lbs)", "Pound-for-Pound (Multiplier)"])
+
+    if ranking_style == "Max Weight (lbs)":
+        filtered_df = pr_df[pr_df['Exercise'] == selected_lift].sort_values(by="Weight", ascending=False).reset_index(drop=True)
+    else:
+        filtered_df = pr_df[pr_df['Exercise'] == selected_lift].sort_values(by="Multiplier", ascending=False).reset_index(drop=True)
+
+    if filtered_df.empty:
+        st.info("No records for this lift yet. Be the first!")
+    else:
+        champ_row = filtered_df.iloc[0]
+        if str(champ_row['Quote']).strip() != "":
+            st.markdown(f'''
+                <div class="champ-board">
+                    <h2 style="color: #ffd700; margin-bottom: 5px;">👑 True Gym Rat: {selected_lift} 👑</h2>
+                    <h3 style="font-style: italic;">"{champ_row['Quote']}"</h3>
+                    <p style="margin-top: 10px; font-size: 18px;">- <b>{champ_row['Name']}</b></p>
+                </div>
+            ''', unsafe_allow_html=True)
+
+        for index, row in filtered_df.iterrows():
+            rank = index + 1
+            if rank == 1:
+                continue # Skip #1 because they are the Champion box above!
+            elif rank == 2:
+                tier_label = "🥈 CBUM Enthusiast"
+            elif rank == 3:
+                tier_label = "🥉 The real gym bro"
+            elif rank == 4:
+                tier_label = "HTN bro"
+            elif rank == 5:
+                tier_label = "Avocado Joe"
+            elif rank == 6:
+                tier_label = "gym kid"
+            else:
+                tier_label = "gym bud (Needs more pre)"
+                
+            stat_text = f"<b>{row['Weight']} lbs</b>" if ranking_style == "Max Weight (lbs)" else f"<b>{row['Multiplier']:.2f}x Bodyweight</b> <span style='font-size: 14px;'>({row['Weight']} lbs)</span>"
             
-        # Change text based on Absolute vs Pound-for-Pound
-        if ranking_style == "Max Weight (lbs)":
-            stat_text = f"<b>{row['Weight']} lbs</b>"
-        else:
-            stat_text = f"<b>{row['Multiplier']:.2f}x Bodyweight</b> <span style='font-size: 14px;'>({row['Weight']} lbs at {row['BodyWeight']} lbs bw)</span>"
-        
-        st.markdown(f"""
-            <div class="tier-card" style="border-left: 5px solid {border_color};">
-                <h4>{tier_label}: {row['Name']}</h4>
-                <p style="font-size: 20px;">{stat_text}</p>
-            </div>
-        """, unsafe_allow_html=True)
+            st.markdown(f"""
+                <div class="tier-card">
+                    <h4>{tier_label}: {row['Name']}</h4>
+                    <p style="font-size: 20px;">{stat_text}</p>
+                </div>
+            """, unsafe_allow_html=True)
 
+with tab2:
+    st.subheader("📈 Progress Over Time")
+    chart_lift = st.selectbox("Select Lift to Graph:", all_exercises, key="chart_lift")
+    chart_data = display_df[display_df['Exercise'] == chart_lift].copy()
+    
+    if not chart_data.empty:
+        chart_data['Timestamp'] = pd.to_datetime(chart_data['Timestamp'], errors='coerce')
+        pivot_df = chart_data.pivot_table(index='Timestamp', columns='Name', values='Weight', aggfunc='max')
+        pivot_df = pivot_df.ffill() # Connects the dots if someone skips a day
+        st.line_chart(pivot_df)
+    else:
+        st.info("Log some lifts to see the chart grow!")
+
+with tab3:
+    st.subheader("🔥 The 1,000 lb Club")
+    st.markdown("Your total is the sum of your all-time Max **Bench Press**, **Squat**, and **Deadlift**.")
+    
+    # Calculate Powerlifting Totals
+    sbd_df = pr_df[pr_df['Exercise'].isin(["Bench Press", "Squat", "Deadlift"])]
+    totals = sbd_df.groupby('Name')['Weight'].sum().reset_index()
+    totals = totals.sort_values(by='Weight', ascending=False).reset_index(drop=True)
+    
+    if totals.empty:
+        st.info("Nobody has logged Bench, Squat, and Deadlift yet!")
+    else:
+        for index, row in totals.iterrows():
+            if row['Weight'] >= 1000:
+                st.success(f"👑 **{row['Name']}** is in the club! Total: **{row['Weight']} lbs**")
+            else:
+                st.info(f"💪 **{row['Name']}** is on the grind. Total: **{row['Weight']} lbs** (Needs {1000 - row['Weight']} lbs more)")
