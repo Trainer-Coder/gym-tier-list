@@ -52,11 +52,8 @@ df["Passcode"] = df["Passcode"].fillna("").astype(str)
 df["Timestamp"] = df["Timestamp"].fillna(str(datetime.datetime.now())).astype(str)
 df["Color"] = df["Color"].fillna("#00ffcc").astype(str)
 
-# 🔧 THE SECURITY FIX: Now pulling from your encrypted Streamlit Secrets!
-try:
-    ADMIN_PASSWORD = st.secrets["admin_pw"]
-except KeyError:
-    ADMIN_PASSWORD = "fallback_if_secret_missing"
+# 🔙 ROLLED BACK TO HARDCODED PASSWORD
+ADMIN_PASSWORD = "boss123"
 
 all_exercises = sorted(df[df['Exercise'] != "No Exercises Found"]['Exercise'].dropna().unique().tolist())
 if not all_exercises: all_exercises = ["Bench Press", "Squat", "Deadlift"]
