@@ -273,27 +273,10 @@ with tab4:
 
 with tab5:
     st.subheader("🧠 Skeletomuscular Functions")
-    st.markdown("Select a muscle group, then click a part to reveal how to train it.")
+    st.markdown("Select a muscle part to reveal how to train it.")
     
-    # 🔧 THE UPGRADE: Nested dictionaries for interactive muscle parts!
+    # We stripped this down to JUST the shoulders!
     anatomy_db = {
-        "Chest (Pectoralis)": {
-            "image_path": "chest.png",
-            "parts": {
-                "Upper Chest (Clavicular)": {
-                    "function": "Lifts the arms up and across the body. Gives the chest a 'full' look.",
-                    "exercises": "Incline DB Press, Low-to-High Cable Crossovers"
-                },
-                "Mid Chest (Sternocostal)": {
-                    "function": "Brings the arms straight across the chest (horizontal adduction).",
-                    "exercises": "Flat Barbell Bench Press, Pec Deck Flys"
-                },
-                "Lower Chest (Abdominal)": {
-                    "function": "Pulls the arms down and across the body.",
-                    "exercises": "Dips, High-to-Low Cable Crossovers"
-                }
-            }
-        },
         "Shoulders (Deltoids)": {
             "image_path": "shoulders.png",
             "parts": {
@@ -310,47 +293,10 @@ with tab5:
                     "exercises": "Face Pulls, Reverse Pec Deck"
                 }
             }
-        },
-        "Back": {
-            "image_path": "back.png",
-            "parts": {
-                "Lats (Latissimus Dorsi)": {
-                    "function": "Pulls the arms down and back. Creates back width.",
-                    "exercises": "Pull-ups, Lat Pulldowns, Single-Arm Rows"
-                },
-                "Traps (Trapezius)": {
-                    "function": "Shrugs the shoulders up and pulls the shoulder blades together.",
-                    "exercises": "Barbell Shrugs, Rack Pulls"
-                },
-                "Rhomboids": {
-                    "function": "Retracts the scapula (squeezes shoulder blades together).",
-                    "exercises": "Barbell Rows, Seated Cable Rows"
-                }
-            }
-        },
-        "Legs": {
-            "image_path": "legs.png",
-            "parts": {
-                "Quads (Quadriceps)": {
-                    "function": "Extends the knee. The massive muscles on the front of the thigh.",
-                    "exercises": "Barbell Squats, Leg Press, Leg Extensions"
-                },
-                "Hamstrings": {
-                    "function": "Flexes the knee and extends the hips. Crucial for speed and power.",
-                    "exercises": "Romanian Deadlifts (RDLs), Leg Curls"
-                },
-                "Glutes": {
-                    "function": "The body's primary hip extensor. The strongest muscle you have.",
-                    "exercises": "Hip Thrusts, Deep Squats, Lunges"
-                },
-                "Calves": {
-                    "function": "Points the toes downward (plantar flexion).",
-                    "exercises": "Standing Calf Raises, Seated Calf Raises"
-                }
-            }
         }
     }
     
+    # Since there's only one item right now, the selectbox will default to it naturally
     selected_muscle = st.selectbox("Select Muscle Group", list(anatomy_db.keys()))
     muscle_data = anatomy_db[selected_muscle]
     
@@ -364,7 +310,6 @@ with tab5:
             
     with col_text:
         st.markdown(f"### Target the {selected_muscle}")
-        # The interactive sub-menu buttons!
         selected_part = st.radio("Select a specific head/part:", list(muscle_data['parts'].keys()), horizontal=True)
         
         part_info = muscle_data['parts'][selected_part]
