@@ -33,17 +33,19 @@ def save_to_sheet(dataframe):
 
 data = sheet.get_all_records()
 if not data:
-    df = pd.DataFrame(columns=["Name", "Exercise", "Weight", "BodyWeight", "Quote", "Passcode", "Timestamp"])
-    df.loc[0] = ["Admin", "Bench Press", 0, 0, "", "", str(datetime.datetime.now())]
+    df = pd.DataFrame(columns=["Name", "Exercise", "Weight", "BodyWeight", "Quote", "Passcode", "Timestamp", "Color"])
+    df.loc[0] = ["Admin", "Bench Press", 0, 0, "", "", str(datetime.datetime.now()), "#ffffff"]
     save_to_sheet(df)
 else:
     df = pd.DataFrame(data)
 
 # Auto-upgrade database for new features
-for col in ["Quote", "Passcode", "Timestamp"]:
+for col in ["Quote", "Passcode", "Timestamp", "Color"]:
     if col not in df.columns:
         if col == "Timestamp":
             df[col] = str(datetime.datetime.now())
+        elif col == "Color":
+            df[col] = "#00ffcc"
         else:
             df[col] = ""
 if "BodyWeight" not in df.columns:
@@ -52,6 +54,7 @@ if "BodyWeight" not in df.columns:
 df["Quote"] = df["Quote"].fillna("").astype(str)
 df["Passcode"] = df["Passcode"].fillna("").astype(str)
 df["Timestamp"] = df["Timestamp"].fillna(str(datetime.datetime.now())).astype(str)
+df["Color"] = df["Color"].fillna("#00ffcc").astype(str)
 
 ADMIN_PASSWORD = "boss123"
 
@@ -84,11 +87,11 @@ with st.sidebar.expander("👑 Admin Vault", expanded=False):
     if admin_input == ADMIN_PASSWORD:
         st.success("Admin Unlocked")
         
-        # 1. Add Exercise
+        # Add Exercise
         new_exercise = st.text_input("Type new exercise name")
         if st.button("Add to List") and new_exercise:
             if new_exercise not in all_exercises:
-                new_row = pd.DataFrame({"Name": ["Admin"], "Exercise": [new_exercise], "Weight": [0], "BodyWeight": [0], "Quote": [""], "Passcode": [""], "Timestamp": [str(datetime.datetime.now())]})
+                new_row = pd.DataFrame({"Name": ["Admin"], "Exercise": [new_exercise], "Weight": [0], "BodyWeight": [0], "Quote": [""], "Passcode": [""], "Timestamp": [str(datetime.datetime.now())], "Color": ["#ffffff"]})
                 df = pd.concat([df, new_row], ignore_index=True)
                 save_to_sheet(df)
                 st.success(f"{new_exercise} added!")
@@ -96,7 +99,7 @@ with st.sidebar.expander("👑 Admin Vault", expanded=False):
                 
         st.divider()
         
-        # 2. Force Delete ANY Record
+        # Force Delete
         st.markdown("**Force Delete a PR Record**")
         admin_display_df = df[df['Name'] != 'Admin']
         if not admin_display_df.empty:
@@ -112,7 +115,7 @@ with st.sidebar.expander("👑 Admin Vault", expanded=False):
         
         st.divider()
         
-        # 3. Nuke Entire Exercise
+        # Nuke Exercise
         st.markdown("**NUKE AN ENTIRE EXERCISE**")
         nuke_ex = st.selectbox("Select Exercise to Destroy", all_exercises, key="nuke_ex")
         if st.button("Nuke Exercise", type="primary"):
@@ -138,6 +141,7 @@ with st.expander("➕ Log a New PR", expanded=False):
             body_weight = st.number_input("Your Body Weight (lbs)", min_value=50.0, value=150.0, step=1.0)
         with col2:
             quote = st.text_input("Champion's Quote (Only shows if you hit #1!)")
+            user_color = st.color_picker("Pick your Line Chart Color", "#00ffcc")
             user_pin = st.text_input("Create/Enter your PIN (4 digits)", type="password")
             st.caption("First time? Create a PIN. Updating? Use your existing PIN.")
             
@@ -152,7 +156,7 @@ with st.expander("➕ Log a New PR", expanded=False):
                 
                 # Append the new lift to build history
                 timestamp = str(datetime.datetime.now())
-                new_row = pd.DataFrame({"Name": [user_name], "Exercise": [exercise], "Weight": [weight], "BodyWeight": [body_weight], "Quote": [quote], "Passcode": [user_pin], "Timestamp": [timestamp]})
+                new_row = pd.DataFrame({"Name": [user_name], "Exercise": [exercise], "Weight": [weight], "BodyWeight": [body_weight], "Quote": [quote], "Passcode": [user_pin], "Timestamp": [timestamp], "Color": [user_color]})
                 df = pd.concat([df, new_row], ignore_index=True)
                 save_to_sheet(df)
                 
@@ -190,18 +194,17 @@ with tab1:
     else:
         champ_row = filtered_df.iloc[0]
         
-        # Determine the stat text for the Champion based on the toggle
         if ranking_style == "Max Weight (lbs)":
             champ_stat = f"{champ_row['Weight']} lbs"
         else:
             champ_stat = f"{champ_row['Multiplier']:.2f}x Bodyweight <span style='font-size: 16px; color: #ffffff;'>({champ_row['Weight']} lbs)</span>"
             
-        # Display the quote only if they wrote one
         quote_html = f'<h3 style="font-style: italic;">"{champ_row["Quote"]}"</h3>' if str(champ_row['Quote']).strip() != "" else ""
         
+        # The True Gymcell Box
         st.markdown(f'''
             <div class="champ-board">
-                <h2 style="color: #ffd700; margin-bottom: 5px;">👑 True Gym Rat: {selected_lift} 👑</h2>
+                <h2 style="color: #ffd700; margin-bottom: 5px;">👑 True Gymcell: {selected_lift} 👑</h2>
                 {quote_html}
                 <p style="font-size: 26px; margin: 10px 0px; color: #ffd700;"><b>{champ_stat}</b></p>
                 <p style="font-size: 18px; margin-bottom: 0px;">- <b>{champ_row['Name']}</b></p>
@@ -210,20 +213,13 @@ with tab1:
 
         for index, row in filtered_df.iterrows():
             rank = index + 1
-            if rank == 1:
-                continue # Skip #1 because they are the Champion box above!
-            elif rank == 2:
-                tier_label = "🥈 CBUM Enthusiast"
-            elif rank == 3:
-                tier_label = "🥉 The real gym bro"
-            elif rank == 4:
-                tier_label = "HTN bro"
-            elif rank == 5:
-                tier_label = "Avocado Joe"
-            elif rank == 6:
-                tier_label = "gym kid"
-            else:
-                tier_label = "gym bud (Needs more pre)"
+            if rank == 1: continue 
+            elif rank == 2: tier_label = "🥈 Gym Rat"
+            elif rank == 3: tier_label = "🥉 David gets laid"
+            elif rank == 4: tier_label = "Gym Bro"
+            elif rank == 5: tier_label = "the Normie"
+            elif rank == 6: tier_label = "The \" I'm busy bro\""
+            else: tier_label = "gym bud (Needs more pre)"
                 
             stat_text = f"<b>{row['Weight']} lbs</b>" if ranking_style == "Max Weight (lbs)" else f"<b>{row['Multiplier']:.2f}x Bodyweight</b> <span style='font-size: 14px;'>({row['Weight']} lbs)</span>"
             
@@ -240,17 +236,26 @@ with tab2:
     chart_data = display_df[display_df['Exercise'] == chart_lift].copy()
     
     if not chart_data.empty:
-        # Filter out insane typos and format dates
         chart_data = chart_data[chart_data['Weight'] <= 800]
         chart_data['Timestamp'] = pd.to_datetime(chart_data['Timestamp'], errors='coerce')
         
-        # Build the Altair chart with an 800lb cap
+        # Map out everyone's chosen colors
+        color_map = chart_data.groupby('Name')['Color'].last().to_dict()
+        for n in chart_data['Name'].unique():
+            if n not in color_map or not str(color_map[n]).startswith('#'):
+                color_map[n] = "#00ffcc" # Fallback color
+                
+        domain = list(color_map.keys())
+        rng = list(color_map.values())
+        
+        # Build the locked chart
         chart = alt.Chart(chart_data).mark_line(point=True, strokeWidth=3).encode(
             x=alt.X('Timestamp:T', title='Date'),
             y=alt.Y('Weight:Q', title='Weight (lbs)', scale=alt.Scale(domain=[0, 800])),
-            color=alt.Color('Name:N', title='Lifter'),
+            color=alt.Color('Name:N', scale=alt.Scale(domain=domain, range=rng), title='Lifter'),
             tooltip=['Name', 'Weight', 'Timestamp']
-        ).interactive()
+        )
+        # We removed .interactive() so it won't scroll to infinity anymore!
         
         st.altair_chart(chart, use_container_width=True)
     else:
@@ -260,7 +265,6 @@ with tab3:
     st.subheader("🔥 The 1,000 lb Club")
     st.markdown("Your total is the sum of your all-time Max **Bench Press**, **Squat**, and **Deadlift**.")
     
-    # Calculate Powerlifting Totals
     sbd_df = pr_df[pr_df['Exercise'].isin(["Bench Press", "Squat", "Deadlift"])]
     totals = sbd_df.groupby('Name')['Weight'].sum().reset_index()
     totals = totals.sort_values(by='Weight', ascending=False).reset_index(drop=True)
