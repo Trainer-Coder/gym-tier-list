@@ -143,7 +143,6 @@ with st.expander("➕ Log a New PR", expanded=False):
             if user_name and user_pin:
                 existing_user = df[df['Name'] == user_name]
                 
-                # Fetch their existing color or give a default
                 user_color = "#00ffcc" 
                 if not existing_user.empty:
                     correct_pin = str(existing_user.iloc[0]['Passcode'])
@@ -168,9 +167,10 @@ display_df = df[df['Name'] != 'Admin'].copy()
 display_df['BodyWeight'] = pd.to_numeric(display_df['BodyWeight'], errors='coerce').fillna(150.0)
 display_df['Weight'] = pd.to_numeric(display_df['Weight'], errors='coerce').fillna(0.0)
 display_df['Multiplier'] = display_df['Weight'] / display_df['BodyWeight']
+
+# This isolates everyone's all-time max for the leaderboard
 pr_df = display_df.sort_values('Weight', ascending=False).drop_duplicates(subset=['Name', 'Exercise'])
 
-# Create a global color map for charts so everyone's colors stay consistent!
 global_color_map = {}
 for n in display_df['Name'].unique():
     c = display_df[display_df['Name'] == n]['Color'].iloc[-1]
@@ -180,7 +180,7 @@ c_domain = list(global_color_map.keys())
 c_range = list(global_color_map.values())
 
 # --- APP TABS ---
-tab1, tab2, tab3, tab4 = st.tabs(["🏆 Leaderboard", "📈 Gains Chart", "🔥 1000 lb Club", "⚔️ Nemesis System"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["🏆 Leaderboard", "📈 Gains Chart", "🔥 1000 lb Club", "⚔️ Nemesis System", "🧠 Skeletomuscular Functions"])
 
 with tab1:
     col_a, col_b = st.columns(2)
@@ -237,9 +237,7 @@ with tab1:
 with tab2:
     st.subheader("📈 Progress Over Time")
     
-    # THE NEW COLOR PICKER SECTION
     with st.expander("🎨 Customize My Chart Color", expanded=False):
-        st.caption("Change the color of your line on all charts.")
         cc_name = st.selectbox("Your Name", display_df['Name'].unique() if not display_df.empty else [])
         cc_pin = st.text_input("Your PIN", type="password", key="cc_pin")
         
@@ -271,6 +269,7 @@ with tab2:
             color=alt.Color('Name:N', scale=alt.Scale(domain=c_domain, range=c_range), title='Lifter'),
             tooltip=['Name', 'Weight', 'Timestamp']
         )
+        
         st.altair_chart(chart, use_container_width=True)
     else:
         st.info("Log some lifts to see the chart grow!")
@@ -323,3 +322,46 @@ with tab4:
             st.warning("Please select two different lifters to compare.")
     else:
         st.info("You need at least 2 people on the leaderboard to unlock the Nemesis System!")
+
+with tab5:
+    st.subheader("🧠 Skeletomuscular Functions")
+    st.markdown("Select a muscle group to view its structure and optimal exercises.")
+    
+    anatomy_db = {
+        "Chest (Pectoralis)": {
+            "heads": "Clavicular (Upper), Sternocostal (Mid), Abdominal (Lower)",
+            "function": "Brings the arms across the body (horizontal adduction) and pushes objects away.",
+            "exercises": "Incline DB Press (Upper), Flat Bench (Mid), Cable Crossovers (Lower)",
+            "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6c/Pectoralis_major.png/400px-Pectoralis_major.png"
+        },
+        "Shoulders (Deltoids)": {
+            "heads": "Anterior (Front), Lateral (Side), Posterior (Rear)",
+            "function": "Lifts the arms away from the body in all directions. Crucial for joint stability.",
+            "exercises": "Overhead Press (Front), Lateral Raises (Side), Face Pulls (Rear)",
+            "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/11/Deltoid_muscle.png/400px-Deltoid_muscle.png"
+        },
+        "Back (Latissimus Dorsi & Rhomboids)": {
+            "heads": "Lats (Width), Traps (Thickness), Rhomboids (Inner)",
+            "function": "Pulls the arms down and back. Stabilizes the spine during heavy lifts.",
+            "exercises": "Pull-ups (Width), Barbell Rows (Thickness), Deadlifts (Overall)",
+            "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d4/Latissimus_dorsi.png/400px-Latissimus_dorsi.png"
+        },
+        "Legs (Quadriceps & Hamstrings)": {
+            "heads": "Quads (Front - 4 heads), Hamstrings (Back - 3 heads), Glutes",
+            "function": "Extends the knee (Quads) and hinges the hips/flexes the knee (Hamstrings).",
+            "exercises": "Squats (Quads/Glutes), Romanian Deadlifts (Hamstrings), Leg Extensions (Quads)",
+            "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a2/Quadriceps.png/400px-Quadriceps.png"
+        }
+    }
+    
+    selected_muscle = st.selectbox("Select Muscle Group", list(anatomy_db.keys()))
+    muscle_data = anatomy_db[selected_muscle]
+    
+    col_text, col_img = st.columns([2, 1])
+    with col_text:
+        st.markdown(f"### {selected_muscle}")
+        st.markdown(f"**🧬 Muscle Heads:** {muscle_data['heads']}")
+        st.markdown(f"**⚙️ Primary Function:** {muscle_data['function']}")
+        st.markdown(f"**🏋️ Top Exercises:** {muscle_data['exercises']}")
+    with col_img:
+        st.image(muscle_data['image_url'], use_container_width=True)
