@@ -4,6 +4,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 import json
 import datetime
+import altair as alt
 
 # Page Config
 st.set_page_config(page_title="Gym Tier List", page_icon="💪", layout="wide")
@@ -59,66 +60,66 @@ if not all_exercises:
     all_exercises = ["Bench Press", "Squat", "Deadlift"]
 
 # --- SIDEBAR: USER SETTINGS & ADMIN ---
-st.sidebar.header("⚙️ Control Panel")
-st.sidebar.subheader("🗑️ Delete My Record")
-if not df.empty and len(df[df['Name'] != 'Admin']) > 0:
-    del_name = st.sidebar.selectbox("Your Name", df[df['Name'] != 'Admin']['Name'].unique())
-    del_exercise = st.sidebar.selectbox("Lift to Delete", df[df['Name'] == del_name]['Exercise'].unique())
-    del_pin = st.sidebar.text_input("Your PIN", type="password", key="del_pin")
-    
-    if st.sidebar.button("Delete My Record"):
-        user_records = df[df['Name'] == del_name]
-        correct_pin = str(user_records.iloc[0]['Passcode'])
-        if del_pin == correct_pin or correct_pin == "":
-            df = df[~((df['Name'] == del_name) & (df['Exercise'] == del_exercise))]
-            save_to_sheet(df)
-            st.sidebar.success("Deleted successfully!")
-            st.rerun()
-        else:
-            st.sidebar.error("❌ Incorrect PIN for this user.")
+st.sidebar.header("⚙️ App Controls")
 
-st.sidebar.divider()
-st.sidebar.subheader("👑 Admin Zone")
-admin_input = st.sidebar.text_input("Enter Admin Password", type="password")
-if admin_input == ADMIN_PASSWORD:
-    st.sidebar.success("Admin Unlocked")
-    
-    # 1. Add Exercise
-    new_exercise = st.sidebar.text_input("Type new exercise name")
-    if st.sidebar.button("Add to List") and new_exercise:
-        if new_exercise not in all_exercises:
-            new_row = pd.DataFrame({"Name": ["Admin"], "Exercise": [new_exercise], "Weight": [0], "BodyWeight": [0], "Quote": [""], "Passcode": [""], "Timestamp": [str(datetime.datetime.now())]})
-            df = pd.concat([df, new_row], ignore_index=True)
+with st.sidebar.expander("🗑️ Delete My Record", expanded=False):
+    if not df.empty and len(df[df['Name'] != 'Admin']) > 0:
+        del_name = st.selectbox("Your Name", df[df['Name'] != 'Admin']['Name'].unique())
+        del_exercise = st.selectbox("Lift to Delete", df[df['Name'] == del_name]['Exercise'].unique())
+        del_pin = st.text_input("Your PIN", type="password", key="del_pin")
+        
+        if st.button("Delete My Record"):
+            user_records = df[df['Name'] == del_name]
+            correct_pin = str(user_records.iloc[0]['Passcode'])
+            if del_pin == correct_pin or correct_pin == "":
+                df = df[~((df['Name'] == del_name) & (df['Exercise'] == del_exercise))]
+                save_to_sheet(df)
+                st.success("Deleted successfully!")
+                st.rerun()
+            else:
+                st.error("❌ Incorrect PIN for this user.")
+
+with st.sidebar.expander("👑 Admin Vault", expanded=False):
+    admin_input = st.text_input("Enter Admin Password", type="password")
+    if admin_input == ADMIN_PASSWORD:
+        st.success("Admin Unlocked")
+        
+        # 1. Add Exercise
+        new_exercise = st.text_input("Type new exercise name")
+        if st.button("Add to List") and new_exercise:
+            if new_exercise not in all_exercises:
+                new_row = pd.DataFrame({"Name": ["Admin"], "Exercise": [new_exercise], "Weight": [0], "BodyWeight": [0], "Quote": [""], "Passcode": [""], "Timestamp": [str(datetime.datetime.now())]})
+                df = pd.concat([df, new_row], ignore_index=True)
+                save_to_sheet(df)
+                st.success(f"{new_exercise} added!")
+                st.rerun()
+                
+        st.divider()
+        
+        # 2. Force Delete ANY Record
+        st.markdown("**Force Delete a PR Record**")
+        admin_display_df = df[df['Name'] != 'Admin']
+        if not admin_display_df.empty:
+            force_name = st.selectbox("Select Any Name", admin_display_df['Name'].unique(), key="force_name")
+            force_ex = st.selectbox("Select Lift", admin_display_df[admin_display_df['Name'] == force_name]['Exercise'].unique() if force_name else [], key="force_ex")
+            if st.button("Delete PR", type="primary"):
+                df = df[~((df['Name'] == force_name) & (df['Exercise'] == force_ex))]
+                save_to_sheet(df)
+                st.success("Record annihilated.")
+                st.rerun()
+        else:
+            st.info("No user records to delete yet.")
+        
+        st.divider()
+        
+        # 3. Nuke Entire Exercise
+        st.markdown("**NUKE AN ENTIRE EXERCISE**")
+        nuke_ex = st.selectbox("Select Exercise to Destroy", all_exercises, key="nuke_ex")
+        if st.button("Nuke Exercise", type="primary"):
+            df = df[df['Exercise'] != nuke_ex]
             save_to_sheet(df)
-            st.sidebar.success(f"{new_exercise} added!")
+            st.success(f"{nuke_ex} completely removed.")
             st.rerun()
-            
-    st.sidebar.divider()
-    
-    # 2. Force Delete ANY Record
-    st.sidebar.markdown("**Force Delete a PR Record**")
-    admin_display_df = df[df['Name'] != 'Admin']
-    if not admin_display_df.empty:
-        force_name = st.sidebar.selectbox("Select Any Name", admin_display_df['Name'].unique(), key="force_name")
-        force_ex = st.sidebar.selectbox("Select Lift", admin_display_df[admin_display_df['Name'] == force_name]['Exercise'].unique() if force_name else [], key="force_ex")
-        if st.sidebar.button("Delete PR", type="primary"):
-            df = df[~((df['Name'] == force_name) & (df['Exercise'] == force_ex))]
-            save_to_sheet(df)
-            st.sidebar.success("Record annihilated.")
-            st.rerun()
-    else:
-        st.sidebar.info("No user records to delete yet.")
-    
-    st.sidebar.divider()
-    
-    # 3. Nuke Entire Exercise
-    st.sidebar.markdown("**NUKE AN ENTIRE EXERCISE**")
-    nuke_ex = st.sidebar.selectbox("Select Exercise to Destroy", all_exercises, key="nuke_ex")
-    if st.sidebar.button("Nuke Exercise", type="primary"):
-        df = df[df['Exercise'] != nuke_ex]
-        save_to_sheet(df)
-        st.sidebar.success(f"{nuke_ex} completely removed.")
-        st.rerun()
 
 # --- THE HYPE FEED ---
 if not df[df['Name'] != 'Admin'].empty:
@@ -127,7 +128,7 @@ if not df[df['Name'] != 'Admin'].empty:
     st.markdown(f"<div class='hype-feed'>📢 LIVE ACTIVITY: {feed_text}</div>", unsafe_allow_html=True)
 
 # --- MAIN PAGE: LOG PR ---
-with st.expander("➕ Log a New PR", expanded=True):
+with st.expander("➕ Log a New PR", expanded=False):
     with st.form("pr_form"):
         col1, col2 = st.columns(2)
         with col1:
@@ -149,7 +150,7 @@ with st.expander("➕ Log a New PR", expanded=True):
                         st.error("❌ That name is taken, and your PIN is incorrect!")
                         st.stop()
                 
-                # Append the new lift instead of overwriting, to build history!
+                # Append the new lift to build history
                 timestamp = str(datetime.datetime.now())
                 new_row = pd.DataFrame({"Name": [user_name], "Exercise": [exercise], "Weight": [weight], "BodyWeight": [body_weight], "Quote": [quote], "Passcode": [user_pin], "Timestamp": [timestamp]})
                 df = pd.concat([df, new_row], ignore_index=True)
@@ -202,7 +203,7 @@ with tab1:
             <div class="champ-board">
                 <h2 style="color: #ffd700; margin-bottom: 5px;">👑 True Gym Rat: {selected_lift} 👑</h2>
                 {quote_html}
-                <p style="font-size: 26px; margin: 10px 0px; color: #00ffcc;"><b>{champ_stat}</b></p>
+                <p style="font-size: 26px; margin: 10px 0px; color: #ffd700;"><b>{champ_stat}</b></p>
                 <p style="font-size: 18px; margin-bottom: 0px;">- <b>{champ_row['Name']}</b></p>
             </div>
         ''', unsafe_allow_html=True)
@@ -239,10 +240,19 @@ with tab2:
     chart_data = display_df[display_df['Exercise'] == chart_lift].copy()
     
     if not chart_data.empty:
+        # Filter out insane typos and format dates
+        chart_data = chart_data[chart_data['Weight'] <= 800]
         chart_data['Timestamp'] = pd.to_datetime(chart_data['Timestamp'], errors='coerce')
-        pivot_df = chart_data.pivot_table(index='Timestamp', columns='Name', values='Weight', aggfunc='max')
-        pivot_df = pivot_df.ffill() # Connects the dots if someone skips a day
-        st.line_chart(pivot_df)
+        
+        # Build the Altair chart with an 800lb cap
+        chart = alt.Chart(chart_data).mark_line(point=True, strokeWidth=3).encode(
+            x=alt.X('Timestamp:T', title='Date'),
+            y=alt.Y('Weight:Q', title='Weight (lbs)', scale=alt.Scale(domain=[0, 800])),
+            color=alt.Color('Name:N', title='Lifter'),
+            tooltip=['Name', 'Weight', 'Timestamp']
+        ).interactive()
+        
+        st.altair_chart(chart, use_container_width=True)
     else:
         st.info("Log some lifts to see the chart grow!")
 
