@@ -24,7 +24,7 @@ creds_dict = json.loads(st.secrets["gcp_json"])
 creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
 client = gspread.authorize(creds)
 
-# Open the sheet (Make sure this matches your Google Sheet name exactly!)
+# Open the sheet
 sheet = client.open("Gym Leaderboard DB").sheet1
 
 # Helper function to save DataFrames to Google Sheets
@@ -35,7 +35,6 @@ def save_to_sheet(dataframe):
 # Load existing data
 data = sheet.get_all_records()
 if not data:
-    # If the sheet is totally blank, create the columns
     df = pd.DataFrame(columns=["Name", "Exercise", "Weight", "Quote", "Passcode"])
     save_to_sheet(df)
 else:
@@ -53,7 +52,8 @@ ADMIN_PASSWORD = "boss123"
 
 default_exercises = ["Bench Press", "Squat", "Deadlift"]
 existing_exercises = df['Exercise'].dropna().unique().tolist()
-all_exercises = list(set(default_exercises + existing_exercises))
+# 🔧 THE FIX: This list is now perfectly sorted!
+all_exercises = sorted(list(set(default_exercises + existing_exercises)))
 
 # --- SIDEBAR: USER SETTINGS & ADMIN ---
 st.sidebar.header("⚙️ Control Panel")
