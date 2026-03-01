@@ -52,7 +52,11 @@ df["Passcode"] = df["Passcode"].fillna("").astype(str)
 df["Timestamp"] = df["Timestamp"].fillna(str(datetime.datetime.now())).astype(str)
 df["Color"] = df["Color"].fillna("#00ffcc").astype(str)
 
-ADMIN_PASSWORD = "boss123"
+# 🔧 THE SECURITY FIX: Now pulling from your encrypted Streamlit Secrets!
+try:
+    ADMIN_PASSWORD = st.secrets["admin_pw"]
+except KeyError:
+    ADMIN_PASSWORD = "fallback_if_secret_missing"
 
 all_exercises = sorted(df[df['Exercise'] != "No Exercises Found"]['Exercise'].dropna().unique().tolist())
 if not all_exercises: all_exercises = ["Bench Press", "Squat", "Deadlift"]
@@ -275,7 +279,6 @@ with tab5:
     st.subheader("🧠 Skeletomuscular Functions")
     st.markdown("Select a muscle part to reveal how to train it.")
     
-    # We stripped this down to JUST the shoulders!
     anatomy_db = {
         "Shoulders (Deltoids)": {
             "image_path": "shoulders.png",
@@ -296,7 +299,6 @@ with tab5:
         }
     }
     
-    # Since there's only one item right now, the selectbox will default to it naturally
     selected_muscle = st.selectbox("Select Muscle Group", list(anatomy_db.keys()))
     muscle_data = anatomy_db[selected_muscle]
     
