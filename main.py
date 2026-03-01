@@ -98,4 +98,5 @@ else:
                 <h4>{tier_label}: {row['Name']}</h4>
                 <p style="font-size: 20px;"><b>{row['Weight']} lbs</b></p>
             </div>
+
         """, unsafe_allow_html=True)
