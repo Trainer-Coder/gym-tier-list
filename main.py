@@ -18,42 +18,39 @@ st.markdown("""
 st.title("🏆 Iron Leaderboard")
 
 # --- 1. CONNECT TO GOOGLE SHEETS ---
-# Load the secret JSON key we saved in Streamlit Settings
 scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 creds_dict = json.loads(st.secrets["gcp_json"])
 creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
 client = gspread.authorize(creds)
 
-# Open the sheet
 sheet = client.open("Gym Leaderboard DB").sheet1
 
-# Helper function to save DataFrames to Google Sheets
 def save_to_sheet(dataframe):
     sheet.clear()
     sheet.update(values=[dataframe.columns.values.tolist()] + dataframe.values.tolist(), range_name="A1")
 
-# Load existing data
 data = sheet.get_all_records()
 if not data:
     df = pd.DataFrame(columns=["Name", "Exercise", "Weight", "Quote", "Passcode"])
+    # Seed it with one Admin row so the list isn't totally empty
+    df.loc[0] = ["Admin", "Bench Press", 0, "", ""]
     save_to_sheet(df)
 else:
     df = pd.DataFrame(data)
 
-# Ensure Passcode and Quote columns exist as text
 for col in ["Quote", "Passcode"]:
     if col not in df.columns:
         df[col] = ""
 df["Quote"] = df["Quote"].fillna("").astype(str)
 df["Passcode"] = df["Passcode"].fillna("").astype(str)
 
-# --- YOUR MASTER ADMIN PASSWORD ---
 ADMIN_PASSWORD = "boss123"
 
-default_exercises = ["Bench Press", "Squat", "Deadlift"]
-existing_exercises = df['Exercise'].dropna().unique().tolist()
-# 🔧 THE FIX: This list is now perfectly sorted!
-all_exercises = sorted(list(set(default_exercises + existing_exercises)))
+# --- THE UPGRADE: Dynamic Exercises Only ---
+# We removed the hardcoded defaults so you can delete ANYTHING.
+all_exercises = sorted(df['Exercise'].dropna().unique().tolist())
+if not all_exercises:
+    all_exercises = ["No Exercises Found"]
 
 # --- SIDEBAR: USER SETTINGS & ADMIN ---
 st.sidebar.header("⚙️ Control Panel")
@@ -93,13 +90,24 @@ if admin_input == ADMIN_PASSWORD:
             st.sidebar.success(f"{new_exercise} added!")
             st.rerun()
             
-    st.sidebar.markdown("**Force Delete a Record**")
+    st.sidebar.markdown("**Force Delete a PR Record**")
     force_name = st.sidebar.selectbox("Select Any Name", df[df['Name'] != 'Admin']['Name'].unique(), key="force_name")
     force_ex = st.sidebar.selectbox("Select Lift", df[df['Name'] == force_name]['Exercise'].unique() if force_name else [], key="force_ex")
-    if st.sidebar.button("Force Delete", type="primary"):
+    if st.sidebar.button("Delete PR", type="primary"):
         df = df[~((df['Name'] == force_name) & (df['Exercise'] == force_ex))]
         save_to_sheet(df)
         st.sidebar.success("Record annihilated.")
+        st.rerun()
+        
+    st.sidebar.divider()
+    # --- THE NEW NUKE TOOL ---
+    st.sidebar.markdown("**NUKE AN ENTIRE EXERCISE**")
+    st.sidebar.caption("⚠️ This deletes the category AND all PRs inside it.")
+    nuke_ex = st.sidebar.selectbox("Select Exercise to Destroy", all_exercises, key="nuke_ex")
+    if st.sidebar.button("Nuke Exercise", type="primary"):
+        df = df[df['Exercise'] != nuke_ex]
+        save_to_sheet(df)
+        st.sidebar.success(f"{nuke_ex} has been completely removed.")
         st.rerun()
 
 # --- MAIN PAGE: LOG PR ---
@@ -116,7 +124,7 @@ with st.expander("➕ Log a New PR", expanded=True):
             st.caption("First time? Create a PIN. Updating? Use your existing PIN.")
             
         if st.form_submit_button("Update Leaderboard"):
-            if user_name and user_pin:
+            if user_name and user_pin and exercise != "No Exercises Found":
                 existing_user = df[df['Name'] == user_name]
                 if not existing_user.empty:
                     correct_pin = str(existing_user.iloc[0]['Passcode'])
@@ -136,7 +144,7 @@ with st.expander("➕ Log a New PR", expanded=True):
                 st.success(f"Boom! {user_name} updated to {weight} lbs.")
                 st.rerun()
             else:
-                st.warning("Please enter your name and a PIN!")
+                st.warning("Please enter your name, a PIN, and ensure there's a valid exercise selected!")
 
 # --- TIER LIST LOGIC ---
 st.divider()
