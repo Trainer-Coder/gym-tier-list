@@ -193,19 +193,19 @@ else:
             tier_label = "👑 True Gym Rat"
             border_color = "#ffd700" # Gold
         elif rank == 2:
-            tier_label = "🥈 CBUM Enthusiast"
+            tier_label = "🥈 ASU Frat leader disciple"
             border_color = "#C0C0C0" # Silver
         elif rank == 3:
-            tier_label = "🥉 The real gym bro"
+            tier_label = "🥉The 225er"
             border_color = "#CD7F32" # Bronze
         elif rank == 4:
             tier_label = "HTN bro"
             border_color = "#ff4b4b" # Red
         elif rank == 5:
-            tier_label = "Avocado Joe"
+            tier_label = "The Skipper"
             border_color = "#ff8c00" # Orange
         elif rank == 6:
-            tier_label = "gym kid"
+            tier_label = "The onceamonthy"
             border_color = "#8a2be2" # Purple
         else:
             tier_label = "gym bud (Needs more pre)"
@@ -223,3 +223,4 @@ else:
                 <p style="font-size: 20px;">{stat_text}</p>
             </div>
         """, unsafe_allow_html=True)
+
