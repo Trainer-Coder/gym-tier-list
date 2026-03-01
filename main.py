@@ -87,7 +87,6 @@ with st.sidebar.expander("👑 Admin Vault", expanded=False):
     if admin_input == ADMIN_PASSWORD:
         st.success("Admin Unlocked")
         
-        # Add Exercise
         new_exercise = st.text_input("Type new exercise name")
         if st.button("Add to List") and new_exercise:
             if new_exercise not in all_exercises:
@@ -98,8 +97,6 @@ with st.sidebar.expander("👑 Admin Vault", expanded=False):
                 st.rerun()
                 
         st.divider()
-        
-        # Force Delete
         st.markdown("**Force Delete a PR Record**")
         admin_display_df = df[df['Name'] != 'Admin']
         if not admin_display_df.empty:
@@ -114,8 +111,6 @@ with st.sidebar.expander("👑 Admin Vault", expanded=False):
             st.info("No user records to delete yet.")
         
         st.divider()
-        
-        # Nuke Exercise
         st.markdown("**NUKE AN ENTIRE EXERCISE**")
         nuke_ex = st.selectbox("Select Exercise to Destroy", all_exercises, key="nuke_ex")
         if st.button("Nuke Exercise", type="primary"):
@@ -141,41 +136,51 @@ with st.expander("➕ Log a New PR", expanded=False):
             body_weight = st.number_input("Your Body Weight (lbs)", min_value=50.0, value=150.0, step=1.0)
         with col2:
             quote = st.text_input("Champion's Quote (Only shows if you hit #1!)")
-            user_color = st.color_picker("Pick your Line Chart Color", "#00ffcc")
             user_pin = st.text_input("Create/Enter your PIN (4 digits)", type="password")
             st.caption("First time? Create a PIN. Updating? Use your existing PIN.")
             
         if st.form_submit_button("Update Leaderboard"):
             if user_name and user_pin:
                 existing_user = df[df['Name'] == user_name]
+                
+                # Fetch their existing color or give a default
+                user_color = "#00ffcc" 
                 if not existing_user.empty:
                     correct_pin = str(existing_user.iloc[0]['Passcode'])
+                    user_color = str(existing_user.iloc[-1]['Color'])
                     if user_pin != correct_pin and correct_pin != "":
                         st.error("❌ That name is taken, and your PIN is incorrect!")
                         st.stop()
                 
-                # Append the new lift to build history
                 timestamp = str(datetime.datetime.now())
                 new_row = pd.DataFrame({"Name": [user_name], "Exercise": [exercise], "Weight": [weight], "BodyWeight": [body_weight], "Quote": [quote], "Passcode": [user_pin], "Timestamp": [timestamp], "Color": [user_color]})
                 df = pd.concat([df, new_row], ignore_index=True)
                 save_to_sheet(df)
                 
-                st.balloons() # 🎉 CONFETTI EFFECT 🎉
+                st.balloons()
                 st.success(f"Boom! {user_name} updated to {weight} lbs.")
+                st.rerun()
             else:
                 st.warning("Please enter your name and a PIN!")
 
-# --- ORGANIZE PRs (Get only the highest weight per person per exercise) ---
+# --- DATA PREP ---
 display_df = df[df['Name'] != 'Admin'].copy()
 display_df['BodyWeight'] = pd.to_numeric(display_df['BodyWeight'], errors='coerce').fillna(150.0)
 display_df['Weight'] = pd.to_numeric(display_df['Weight'], errors='coerce').fillna(0.0)
 display_df['Multiplier'] = display_df['Weight'] / display_df['BodyWeight']
-
-# This isolates everyone's all-time max for the leaderboard
 pr_df = display_df.sort_values('Weight', ascending=False).drop_duplicates(subset=['Name', 'Exercise'])
 
+# Create a global color map for charts so everyone's colors stay consistent!
+global_color_map = {}
+for n in display_df['Name'].unique():
+    c = display_df[display_df['Name'] == n]['Color'].iloc[-1]
+    if not str(c).startswith('#'): c = "#00ffcc"
+    global_color_map[n] = c
+c_domain = list(global_color_map.keys())
+c_range = list(global_color_map.values())
+
 # --- APP TABS ---
-tab1, tab2, tab3 = st.tabs(["🏆 Leaderboard", "📈 Gains Chart", "🔥 1000 lb Club"])
+tab1, tab2, tab3, tab4 = st.tabs(["🏆 Leaderboard", "📈 Gains Chart", "🔥 1000 lb Club", "⚔️ Nemesis System"])
 
 with tab1:
     col_a, col_b = st.columns(2)
@@ -201,7 +206,6 @@ with tab1:
             
         quote_html = f'<h3 style="font-style: italic;">"{champ_row["Quote"]}"</h3>' if str(champ_row['Quote']).strip() != "" else ""
         
-        # The True Gymcell Box
         st.markdown(f'''
             <div class="champ-board">
                 <h2 style="color: #ffd700; margin-bottom: 5px;">👑 True Gymcell: {selected_lift} 👑</h2>
@@ -232,6 +236,28 @@ with tab1:
 
 with tab2:
     st.subheader("📈 Progress Over Time")
+    
+    # THE NEW COLOR PICKER SECTION
+    with st.expander("🎨 Customize My Chart Color", expanded=False):
+        st.caption("Change the color of your line on all charts.")
+        cc_name = st.selectbox("Your Name", display_df['Name'].unique() if not display_df.empty else [])
+        cc_pin = st.text_input("Your PIN", type="password", key="cc_pin")
+        
+        current_color = global_color_map.get(cc_name, "#00ffcc") if cc_name else "#00ffcc"
+        new_color = st.color_picker("Pick your new color", current_color)
+        
+        if st.button("Update Color"):
+            user_records = df[df['Name'] == cc_name]
+            if not user_records.empty:
+                correct_pin = str(user_records.iloc[0]['Passcode'])
+                if cc_pin == correct_pin or correct_pin == "":
+                    df.loc[df['Name'] == cc_name, 'Color'] = new_color
+                    save_to_sheet(df)
+                    st.success("Color successfully updated!")
+                    st.rerun()
+                else:
+                    st.error("❌ Incorrect PIN.")
+    
     chart_lift = st.selectbox("Select Lift to Graph:", all_exercises, key="chart_lift")
     chart_data = display_df[display_df['Exercise'] == chart_lift].copy()
     
@@ -239,24 +265,12 @@ with tab2:
         chart_data = chart_data[chart_data['Weight'] <= 800]
         chart_data['Timestamp'] = pd.to_datetime(chart_data['Timestamp'], errors='coerce')
         
-        # Map out everyone's chosen colors
-        color_map = chart_data.groupby('Name')['Color'].last().to_dict()
-        for n in chart_data['Name'].unique():
-            if n not in color_map or not str(color_map[n]).startswith('#'):
-                color_map[n] = "#00ffcc" # Fallback color
-                
-        domain = list(color_map.keys())
-        rng = list(color_map.values())
-        
-        # Build the locked chart
         chart = alt.Chart(chart_data).mark_line(point=True, strokeWidth=3).encode(
             x=alt.X('Timestamp:T', title='Date'),
             y=alt.Y('Weight:Q', title='Weight (lbs)', scale=alt.Scale(domain=[0, 800])),
-            color=alt.Color('Name:N', scale=alt.Scale(domain=domain, range=rng), title='Lifter'),
+            color=alt.Color('Name:N', scale=alt.Scale(domain=c_domain, range=c_range), title='Lifter'),
             tooltip=['Name', 'Weight', 'Timestamp']
         )
-        # We removed .interactive() so it won't scroll to infinity anymore!
-        
         st.altair_chart(chart, use_container_width=True)
     else:
         st.info("Log some lifts to see the chart grow!")
@@ -277,3 +291,35 @@ with tab3:
                 st.success(f"👑 **{row['Name']}** is in the club! Total: **{row['Weight']} lbs**")
             else:
                 st.info(f"💪 **{row['Name']}** is on the grind. Total: **{row['Weight']} lbs** (Needs {1000 - row['Weight']} lbs more)")
+
+with tab4:
+    st.subheader("⚔️ The Nemesis System")
+    st.markdown("Select two lifters to see how they stack up against each other.")
+    
+    unique_lifters = sorted(pr_df['Name'].unique().tolist())
+    
+    if len(unique_lifters) >= 2:
+        col_x, col_y = st.columns(2)
+        with col_x:
+            lifter_a = st.selectbox("Lifter A", unique_lifters, index=0)
+        with col_y:
+            lifter_b = st.selectbox("Lifter B", unique_lifters, index=1)
+            
+        if lifter_a != lifter_b:
+            vs_df = pr_df[pr_df['Name'].isin([lifter_a, lifter_b])].copy()
+            
+            if not vs_df.empty:
+                bars = alt.Chart(vs_df).mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
+                    x=alt.X('Name:N', title=None, axis=alt.Axis(labels=False, ticks=False)),
+                    y=alt.Y('Weight:Q', title='Max Weight (lbs)'),
+                    color=alt.Color('Name:N', scale=alt.Scale(domain=c_domain, range=c_range), legend=alt.Legend(title="Lifter", orient="bottom")),
+                    column=alt.Column('Exercise:N', header=alt.Header(title=None, labelOrient='bottom'))
+                ).properties(width=100, height=400)
+                
+                st.altair_chart(bars)
+            else:
+                st.info("No data to compare yet.")
+        else:
+            st.warning("Please select two different lifters to compare.")
+    else:
+        st.info("You need at least 2 people on the leaderboard to unlock the Nemesis System!")
